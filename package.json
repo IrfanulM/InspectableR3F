@@ -1,0 +1,14 @@
+{
+  "name": "inspectable-r3f",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Inspect HTML textures on React Three Fiber meshes",
+  "workspaces": [
+    "packages/*",
+    "playground"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=playground",
+    "build": "npm run build --workspace=inspectable-r3f"
+  }
+}

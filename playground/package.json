@@ -1,0 +1,25 @@
+{
+    "name": "playground",
+    "version": "0.0.1",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "vite build"
+    },
+    "dependencies": {
+        "@react-three/drei": "^9.92.0",
+        "@react-three/fiber": "^8.15.0",
+        "inspectable-r3f": "*",
+        "react": "^18.2.0",
+        "react-dom": "^18.2.0",
+        "three": "^0.160.0"
+    },
+    "devDependencies": {
+        "@types/react": "^18.2.0",
+        "@types/react-dom": "^18.2.0",
+        "@types/three": "^0.160.0",
+        "@vitejs/plugin-react": "^4.2.1",
+        "vite": "^5.0.0"
+    }
+}
