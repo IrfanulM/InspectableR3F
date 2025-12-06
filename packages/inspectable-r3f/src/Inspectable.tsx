@@ -32,6 +32,20 @@ function ensureModalContainer() {
     return modalRoot!;
 }
 
+// Context menu state
+let contextMenuRoot: Root | null = null;
+let contextMenuContainer: HTMLDivElement | null = null;
+
+function ensureContextMenuContainer() {
+    if (!contextMenuContainer) {
+        contextMenuContainer = document.createElement('div');
+        contextMenuContainer.id = 'inspectable-r3f-context-menu';
+        document.body.appendChild(contextMenuContainer);
+        contextMenuRoot = createRoot(contextMenuContainer);
+    }
+    return contextMenuRoot!;
+}
+
 const overlayStyle: CSSProperties = {
     position: 'fixed',
     inset: 0,
@@ -59,10 +73,76 @@ const headerStyle: CSSProperties = {
     borderBottom: '1px solid #333',
 };
 
+const contextMenuStyle: CSSProperties = {
+    position: 'fixed',
+    backgroundColor: '#1a1a1a',
+    border: '1px solid #333',
+    borderRadius: '6px',
+    padding: '4px 0',
+    minWidth: '160px',
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+    zIndex: 10000,
+};
+
+const contextMenuItemStyle: CSSProperties = {
+    padding: '8px 12px',
+    color: '#e0e0e0',
+    fontSize: '13px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+};
+
 interface ModalState {
     container: HTMLDivElement;
     onTextureUpdate: (texture: THREE.CanvasTexture) => void;
     onClose: () => void;
+}
+
+interface ContextMenuState {
+    x: number;
+    y: number;
+    onInspect: () => void;
+    onClose: () => void;
+}
+
+function ContextMenuContent({ state }: { state: ContextMenuState }) {
+    useEffect(() => {
+        const handleClickOutside = () => state.onClose();
+        const handleEscape = (e: KeyboardEvent) => { if (e.key === 'Escape') state.onClose(); };
+
+        document.addEventListener('click', handleClickOutside);
+        document.addEventListener('keydown', handleEscape);
+        return () => {
+            document.removeEventListener('click', handleClickOutside);
+            document.removeEventListener('keydown', handleEscape);
+        };
+    }, [state]);
+
+    return (
+        <div
+            style={{ ...contextMenuStyle, left: state.x, top: state.y }}
+            onClick={(e) => e.stopPropagation()}
+        >
+            <div
+                style={contextMenuItemStyle}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#2a2a2a')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                onClick={() => { state.onInspect(); state.onClose(); }}
+            >
+                Inspect Texture
+            </div>
+        </div>
+    );
+}
+
+function showContextMenu(state: ContextMenuState) {
+    ensureContextMenuContainer().render(<ContextMenuContent state={state} />);
+}
+
+function hideContextMenu() {
+    if (contextMenuRoot) contextMenuRoot.render(null);
 }
 
 function ModalContent({ state }: { state: ModalState }) {
@@ -138,7 +218,7 @@ export function Inspectable({ children }: InspectableProps) {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const groupRef = useRef<Group>(null);
     const initialized = useRef(false);
-    const { gl } = useThree();
+    useThree();
 
     // Separate R3F children from HTML children
     const r3fChildren: ReactNode[] = [];
@@ -196,8 +276,7 @@ export function Inspectable({ children }: InspectableProps) {
         }
     }, []);
 
-    const handleClick = useCallback((event: ThreeEvent<MouseEvent>) => {
-        event.stopPropagation();
+    const openInspector = useCallback(() => {
         if (containerRef.current) {
             showModal({
                 container: containerRef.current,
@@ -207,8 +286,16 @@ export function Inspectable({ children }: InspectableProps) {
         }
     }, [updateMeshTexture]);
 
-    const handlePointerOver = useCallback(() => { gl.domElement.style.cursor = 'pointer'; }, [gl]);
-    const handlePointerOut = useCallback(() => { gl.domElement.style.cursor = 'auto'; }, [gl]);
+    const handleContextMenu = useCallback((event: ThreeEvent<MouseEvent>) => {
+        event.stopPropagation();
+        const nativeEvent = event.nativeEvent;
+        showContextMenu({
+            x: nativeEvent.clientX,
+            y: nativeEvent.clientY,
+            onInspect: openInspector,
+            onClose: hideContextMenu,
+        });
+    }, [openInspector]);
 
     useEffect(() => {
         if (!texture || !groupRef.current) return;
@@ -223,7 +310,7 @@ export function Inspectable({ children }: InspectableProps) {
 
     if (htmlChildren.length === 0) {
         return (
-            <group ref={groupRef} onClick={handleClick} onPointerOver={handlePointerOver} onPointerOut={handlePointerOut}>
+            <group ref={groupRef} onContextMenu={handleContextMenu}>
                 {r3fChildren}
             </group>
         );
@@ -232,7 +319,7 @@ export function Inspectable({ children }: InspectableProps) {
     if (!texture) return null;
 
     return (
-        <group ref={groupRef} onClick={handleClick} onPointerOver={handlePointerOver} onPointerOut={handlePointerOut}>
+        <group ref={groupRef} onContextMenu={handleContextMenu}>
             {r3fChildren}
         </group>
     );
