@@ -1,24 +1,53 @@
-import { useState, useEffect, useRef, useCallback, ReactNode, CSSProperties, Children, isValidElement } from 'react';
-import { ThreeEvent, useThree } from '@react-three/fiber';
-import { Group } from 'three';
+import { useRef, useCallback, ReactNode, CSSProperties, useEffect } from 'react';
+import { ThreeEvent } from '@react-three/fiber';
+import { Group, Mesh, MeshBasicMaterial, MeshStandardMaterial } from 'three';
 import * as THREE from 'three';
-import html2canvas from 'html2canvas';
 import { createRoot, Root } from 'react-dom/client';
+import originalHtml2canvas from 'html2canvas';
 
-export interface InspectableProps {
-    children: ReactNode;
+interface CaptureInfo {
+    element: HTMLElement;
+    width: number;
+    height: number;
+    scale: number;
+    mesh?: Mesh;
 }
 
-// Standard HTML tags to detect 2D content
-const HTML_TAGS = new Set([
-    'div', 'span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-    'img', 'button', 'input', 'form', 'label', 'ul', 'li', 'ol',
-    'table', 'tr', 'td', 'th', 'thead', 'tbody', 'section', 'article',
-    'header', 'footer', 'nav', 'aside', 'main', 'canvas', 'video', 'audio',
-    'iframe', 'a', 'strong', 'em', 'b', 'i', 'small', 'code', 'pre'
-]);
+// Maps canvas → source element + capture settings for live updates
+const containerRegistry = new WeakMap<HTMLCanvasElement, CaptureInfo>();
 
-// Global modal state
+// Drop-in html2canvas replacement that tracks source elements
+export async function html2canvas(
+    element: HTMLElement,
+    options?: Parameters<typeof originalHtml2canvas>[1]
+): Promise<HTMLCanvasElement> {
+    const canvas = await originalHtml2canvas(element, options);
+
+    containerRegistry.set(canvas, {
+        element,
+        width: options?.width || element.offsetWidth,
+        height: options?.height || element.offsetHeight,
+        scale: options?.scale || 1,
+    });
+
+    return canvas;
+}
+
+// Links a mesh to its source element via the texture's canvas
+function associateMeshWithCanvas(mesh: Mesh): CaptureInfo | undefined {
+    const material = mesh.material as MeshBasicMaterial | MeshStandardMaterial;
+    if (!material?.map?.source?.data) return undefined;
+
+    const canvas = material.map.source.data;
+    if (!(canvas instanceof HTMLCanvasElement)) return undefined;
+
+    const info = containerRegistry.get(canvas);
+    if (info) {
+        info.mesh = mesh;
+    }
+    return info;
+}
+
 let modalRoot: Root | null = null;
 let modalContainer: HTMLDivElement | null = null;
 
@@ -32,7 +61,6 @@ function ensureModalContainer() {
     return modalRoot!;
 }
 
-// Context menu state
 let contextMenuRoot: Root | null = null;
 let contextMenuContainer: HTMLDivElement | null = null;
 
@@ -95,8 +123,7 @@ const contextMenuItemStyle: CSSProperties = {
 };
 
 interface ModalState {
-    container: HTMLDivElement;
-    onTextureUpdate: (texture: THREE.CanvasTexture) => void;
+    captureInfo: CaptureInfo;
     onClose: () => void;
 }
 
@@ -147,47 +174,64 @@ function hideContextMenu() {
 
 function ModalContent({ state }: { state: ModalState }) {
     const contentRef = useRef<HTMLDivElement>(null);
-    const originalParentRef = useRef<HTMLElement | null>(null);
+    const originalStyleRef = useRef<{ position: string; left: string } | null>(null);
+    const { captureInfo } = state;
 
     useEffect(() => {
-        const container = state.container;
+        const container = captureInfo.element;
         if (!contentRef.current) return;
 
-        originalParentRef.current = container.parentElement;
+        originalStyleRef.current = {
+            position: container.style.position,
+            left: container.style.left,
+        };
+
         container.style.position = 'static';
         container.style.left = '0';
         contentRef.current.appendChild(container);
 
-        return () => {
-            if (originalParentRef.current) {
-                container.style.position = 'absolute';
-                container.style.left = '-9999px';
-                originalParentRef.current.appendChild(container);
-            }
-        };
-    }, [state.container]);
+        const updateTexture = async () => {
+            if (!captureInfo.mesh) return;
 
-    useEffect(() => {
-        const container = state.container;
-        const width = container.offsetWidth;
-        const height = container.offsetHeight;
-
-        const recapture = async () => {
             try {
-                const canvas = await html2canvas(container, { width, height, scale: 2, logging: false });
+                const canvas = await originalHtml2canvas(container, {
+                    width: captureInfo.width,
+                    height: captureInfo.height,
+                    scale: captureInfo.scale,
+                    logging: false,
+                });
+
                 const texture = new THREE.CanvasTexture(canvas);
                 texture.colorSpace = THREE.SRGBColorSpace;
                 texture.needsUpdate = true;
-                state.onTextureUpdate(texture);
+
+                const material = captureInfo.mesh.material as MeshBasicMaterial | MeshStandardMaterial;
+                if (material) {
+                    material.map = texture;
+                    material.needsUpdate = true;
+                }
             } catch (e) {
-                console.error('Recapture failed:', e);
+                console.error('Live texture update failed:', e);
             }
         };
 
-        const observer = new MutationObserver(recapture);
-        observer.observe(container, { childList: true, subtree: true, characterData: true, attributes: true });
-        return () => observer.disconnect();
-    }, [state]);
+        // Watch for DOM changes and re-capture texture
+        const observer = new MutationObserver(updateTexture);
+        observer.observe(container, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+            attributes: true
+        });
+
+        return () => {
+            observer.disconnect();
+
+            container.style.position = originalStyleRef.current?.position || 'absolute';
+            container.style.left = originalStyleRef.current?.left || '-9999px';
+            document.body.appendChild(container);
+        };
+    }, [captureInfo]);
 
     return (
         <div style={overlayStyle} onClick={(e) => e.target === e.currentTarget && state.onClose()}>
@@ -210,117 +254,58 @@ function hideModal() {
     if (modalRoot) modalRoot.render(null);
 }
 
+export interface InspectableProps {
+    children: ReactNode;
+}
+
 /**
  * Makes any R3F mesh inspectable. Just wrap your mesh and HTML content.
  */
 export function Inspectable({ children }: InspectableProps) {
-    const [texture, setTexture] = useState<THREE.CanvasTexture | null>(null);
-    const containerRef = useRef<HTMLDivElement | null>(null);
     const groupRef = useRef<Group>(null);
-    const initialized = useRef(false);
-    useThree();
-
-    // Separate R3F children from HTML children
-    const r3fChildren: ReactNode[] = [];
-    const htmlChildren: ReactNode[] = [];
-
-    Children.forEach(children, (child) => {
-        if (isValidElement(child)) {
-            const type = child.type;
-            if (typeof type === 'string' && HTML_TAGS.has(type)) {
-                htmlChildren.push(child);
-            } else {
-                r3fChildren.push(child);
-            }
-        }
-    });
-
-    useEffect(() => {
-        if (initialized.current || htmlChildren.length === 0) return;
-        initialized.current = true;
-
-        const container = document.createElement('div');
-        container.style.position = 'absolute';
-        container.style.left = '-9999px';
-        document.body.appendChild(container);
-        containerRef.current = container;
-
-        const root = createRoot(container);
-        root.render(<>{htmlChildren}</>);
-
-        setTimeout(async () => {
-            try {
-                const width = container.offsetWidth || 300;
-                const height = container.offsetHeight || 200;
-                const canvas = await html2canvas(container, { width, height, scale: 2, logging: false });
-                const tex = new THREE.CanvasTexture(canvas);
-                tex.colorSpace = THREE.SRGBColorSpace;
-                tex.needsUpdate = true;
-                setTexture(tex);
-            } catch (e) {
-                console.error('Initial capture failed:', e);
-            }
-        }, 100);
-    }, []);
-
-    const updateMeshTexture = useCallback((newTexture: THREE.CanvasTexture) => {
-        setTexture(newTexture);
-        if (groupRef.current) {
-            groupRef.current.traverse((child) => {
-                if (child instanceof THREE.Mesh && child.material) {
-                    const mat = child.material as THREE.MeshBasicMaterial;
-                    mat.map = newTexture;
-                    mat.needsUpdate = true;
-                }
-            });
-        }
-    }, []);
-
-    const openInspector = useCallback(() => {
-        if (containerRef.current) {
-            showModal({
-                container: containerRef.current,
-                onTextureUpdate: updateMeshTexture,
-                onClose: hideModal,
-            });
-        }
-    }, [updateMeshTexture]);
 
     const handleContextMenu = useCallback((event: ThreeEvent<MouseEvent>) => {
         event.stopPropagation();
+
+        const mesh = event.object as Mesh;
+        if (!mesh) return;
+
+        let captureInfo: CaptureInfo | undefined;
+
+        captureInfo = associateMeshWithCanvas(mesh);
+
+        // Fallback: check userData for manually set container
+        if (!captureInfo && mesh.userData?.inspectableContainer) {
+            captureInfo = {
+                element: mesh.userData.inspectableContainer,
+                width: mesh.userData.inspectableContainer.offsetWidth || 200,
+                height: mesh.userData.inspectableContainer.offsetHeight || 200,
+                scale: 2,
+                mesh,
+            };
+        }
+
+        if (!captureInfo) return;
+
+        captureInfo.mesh = mesh;
+
         const nativeEvent = event.nativeEvent;
         showContextMenu({
             x: nativeEvent.clientX,
             y: nativeEvent.clientY,
-            onInspect: openInspector,
+            onInspect: () => {
+                showModal({
+                    captureInfo,
+                    onClose: hideModal,
+                });
+            },
             onClose: hideContextMenu,
         });
-    }, [openInspector]);
-
-    useEffect(() => {
-        if (!texture || !groupRef.current) return;
-        groupRef.current.traverse((child) => {
-            if (child instanceof THREE.Mesh && child.material) {
-                const mat = child.material as THREE.MeshBasicMaterial;
-                mat.map = texture;
-                mat.needsUpdate = true;
-            }
-        });
-    }, [texture]);
-
-    if (htmlChildren.length === 0) {
-        return (
-            <group ref={groupRef} onContextMenu={handleContextMenu}>
-                {r3fChildren}
-            </group>
-        );
-    }
-
-    if (!texture) return null;
+    }, []);
 
     return (
         <group ref={groupRef} onContextMenu={handleContextMenu}>
-            {r3fChildren}
+            {children}
         </group>
     );
 }
