@@ -9,18 +9,13 @@ export interface InspectableProps {
     children: ReactNode;
 }
 
-// R3F element types
-const R3F_ELEMENTS = new Set([
-    'mesh', 'group', 'object3D', 'primitive',
-    'line', 'lineSegments', 'lineLoop', 'points',
-    'sprite', 'instancedMesh', 'skinnedMesh',
-    'bone', 'skeleton', 'lod',
-    'ambientLight', 'directionalLight', 'pointLight', 'spotLight', 'hemisphereLight', 'rectAreaLight',
-    'perspectiveCamera', 'orthographicCamera',
-    'planeGeometry', 'boxGeometry', 'sphereGeometry', 'cylinderGeometry', 'coneGeometry', 'torusGeometry',
-    'meshBasicMaterial', 'meshStandardMaterial', 'meshPhongMaterial', 'meshLambertMaterial',
-    'meshNormalMaterial', 'meshDepthMaterial', 'meshToonMaterial', 'meshPhysicalMaterial',
-    'lineBasicMaterial', 'lineDashedMaterial', 'pointsMaterial', 'spriteMaterial', 'shaderMaterial',
+// Standard HTML tags to detect 2D content
+const HTML_TAGS = new Set([
+    'div', 'span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'img', 'button', 'input', 'form', 'label', 'ul', 'li', 'ol',
+    'table', 'tr', 'td', 'th', 'thead', 'tbody', 'section', 'article',
+    'header', 'footer', 'nav', 'aside', 'main', 'canvas', 'video', 'audio',
+    'iframe', 'a', 'strong', 'em', 'b', 'i', 'small', 'code', 'pre'
 ]);
 
 // Global modal state
@@ -152,17 +147,10 @@ export function Inspectable({ children }: InspectableProps) {
     Children.forEach(children, (child) => {
         if (isValidElement(child)) {
             const type = child.type;
-            if (typeof type === 'string' && !R3F_ELEMENTS.has(type)) {
+            if (typeof type === 'string' && HTML_TAGS.has(type)) {
                 htmlChildren.push(child);
-            } else if (typeof type === 'string' && R3F_ELEMENTS.has(type)) {
-                r3fChildren.push(child);
             } else {
-                const name = typeof type === 'function' ? type.name : '';
-                if (name && name[0] === name[0].toUpperCase()) {
-                    htmlChildren.push(child);
-                } else {
-                    r3fChildren.push(child);
-                }
+                r3fChildren.push(child);
             }
         }
     });

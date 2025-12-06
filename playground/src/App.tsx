@@ -3,6 +3,16 @@ import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { Inspectable } from 'inspectable-r3f';
 
+// Custom R3F Component to test child detection logic
+function CustomBox(props: any) {
+    return (
+        <mesh {...props}>
+            <boxGeometry args={[2, 2, 2]} />
+            <meshBasicMaterial />
+        </mesh>
+    );
+}
+
 // Multi-face cube made of 6 inspectable planes
 function MultiTextureCube() {
     const size = 2;
@@ -61,10 +71,7 @@ function App() {
             </Inspectable>
 
             <Inspectable>
-                <mesh position={[0, 0, 0]}>
-                    <boxGeometry args={[2, 2, 2]} />
-                    <meshBasicMaterial />
-                </mesh>
+                <CustomBox position={[0, 0, 0]} />
                 <div style={{ width: 200, height: 200, background: '#059669', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Georgia' }}>
                     <h2>Edit Me</h2>
                 </div>
