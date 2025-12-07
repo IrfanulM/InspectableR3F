@@ -92,11 +92,6 @@ function useCanvas2DWithHtml(
             </div>
         );
 
-        // Manual approach: required when not using the html2canvas wrapper
-        if (meshRef.current) {
-            meshRef.current.userData.inspectableContainer = container;
-        }
-
         return () => {
             root.unmount();
         };
