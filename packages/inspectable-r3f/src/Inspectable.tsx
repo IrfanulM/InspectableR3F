@@ -64,14 +64,73 @@ function ensureGhost(canvas: HTMLCanvasElement): HTMLElement {
     return canvas.__inspectable_ghost;
 }
 
-// Patch Canvas 2D to build a ghost DOM that mirrors canvas content for text selection and DevTools inspection
-if (typeof window !== 'undefined' && !window.__r3f_inspectable_patched) {
+// Storage for original Canvas 2D methods to enable restoration
+const originalMethods: {
+    save?: typeof CanvasRenderingContext2D.prototype.save;
+    restore?: typeof CanvasRenderingContext2D.prototype.restore;
+    translate?: typeof CanvasRenderingContext2D.prototype.translate;
+    rotate?: typeof CanvasRenderingContext2D.prototype.rotate;
+    scale?: typeof CanvasRenderingContext2D.prototype.scale;
+    transform?: typeof CanvasRenderingContext2D.prototype.transform;
+    setTransform?: typeof CanvasRenderingContext2D.prototype.setTransform;
+    clearRect?: typeof CanvasRenderingContext2D.prototype.clearRect;
+    fillText?: typeof CanvasRenderingContext2D.prototype.fillText;
+    strokeText?: typeof CanvasRenderingContext2D.prototype.strokeText;
+    fillRect?: typeof CanvasRenderingContext2D.prototype.fillRect;
+    strokeRect?: typeof CanvasRenderingContext2D.prototype.strokeRect;
+    drawImage?: typeof CanvasRenderingContext2D.prototype.drawImage;
+} = {};
+
+// Reference count for patch management
+let patchRefCount = 0;
+
+// Restore all patched methods to originals
+function restoreCanvas2DPatches() {
+    if (typeof window === 'undefined' || !window.__r3f_inspectable_patched) return;
+
+    const ctxProto = CanvasRenderingContext2D.prototype;
+
+    if (originalMethods.save) ctxProto.save = originalMethods.save;
+    if (originalMethods.restore) ctxProto.restore = originalMethods.restore;
+    if (originalMethods.translate) ctxProto.translate = originalMethods.translate;
+    if (originalMethods.rotate) ctxProto.rotate = originalMethods.rotate;
+    if (originalMethods.scale) ctxProto.scale = originalMethods.scale;
+    if (originalMethods.transform) ctxProto.transform = originalMethods.transform;
+    if (originalMethods.setTransform) ctxProto.setTransform = originalMethods.setTransform;
+    if (originalMethods.clearRect) ctxProto.clearRect = originalMethods.clearRect;
+    if (originalMethods.fillText) ctxProto.fillText = originalMethods.fillText;
+    if (originalMethods.strokeText) ctxProto.strokeText = originalMethods.strokeText;
+    if (originalMethods.fillRect) ctxProto.fillRect = originalMethods.fillRect;
+    if (originalMethods.strokeRect) ctxProto.strokeRect = originalMethods.strokeRect;
+    if (originalMethods.drawImage) ctxProto.drawImage = originalMethods.drawImage;
+
+    window.__r3f_inspectable_patched = false;
+}
+
+// Apply Canvas 2D patches (only runs once, stores originals)
+function applyCanvas2DPatches() {
+    if (typeof window === 'undefined' || window.__r3f_inspectable_patched) return;
     window.__r3f_inspectable_patched = true;
 
     const ctxProto = CanvasRenderingContext2D.prototype;
 
+    // Store all originals for later restoration
+    originalMethods.save = ctxProto.save;
+    originalMethods.restore = ctxProto.restore;
+    originalMethods.translate = ctxProto.translate;
+    originalMethods.rotate = ctxProto.rotate;
+    originalMethods.scale = ctxProto.scale;
+    originalMethods.transform = ctxProto.transform;
+    originalMethods.setTransform = ctxProto.setTransform;
+    originalMethods.clearRect = ctxProto.clearRect;
+    originalMethods.fillText = ctxProto.fillText;
+    originalMethods.strokeText = ctxProto.strokeText;
+    originalMethods.fillRect = ctxProto.fillRect;
+    originalMethods.strokeRect = ctxProto.strokeRect;
+    originalMethods.drawImage = ctxProto.drawImage;
+
     // Track transform state to position ghost elements correctly
-    const originalSave = ctxProto.save;
+    const originalSave = originalMethods.save;
     ctxProto.save = function () {
         if (!window.__r3f_inspectable_active) return originalSave.apply(this, arguments as any);
         const canvas = this.canvas;
@@ -363,6 +422,11 @@ if (typeof window !== 'undefined' && !window.__r3f_inspectable_patched) {
 
         return originalDrawImage.apply(this, args as any);
     } as any;
+}
+
+// Apply patches on first module load if in browser
+if (typeof window !== 'undefined') {
+    applyCanvas2DPatches();
 }
 
 // Drop-in wrapper for html2canvas that automatically registers the result
@@ -846,6 +910,12 @@ export function Inspectable({ enableCanvas2DPatch = true }: InspectableProps = {
     const pointer = new Vector2();
 
     useEffect(() => {
+        // Increment patch reference count and ensure patches are applied
+        patchRefCount++;
+        if (patchRefCount === 1) {
+            applyCanvas2DPatches();
+        }
+
         // Enable Canvas 2D patching only if prop allows
         window.__r3f_inspectable_active = enableCanvas2DPatch;
 
@@ -916,6 +986,12 @@ export function Inspectable({ enableCanvas2DPatch = true }: InspectableProps = {
             canvas.removeEventListener('contextmenu', handleContextMenu);
             // Disable Canvas 2D patching when unmounted
             window.__r3f_inspectable_active = false;
+
+            // Decrement ref count and restore prototypes if this was the last instance
+            patchRefCount--;
+            if (patchRefCount === 0) {
+                restoreCanvas2DPatches();
+            }
         };
     }, [gl, scene, camera, enableCanvas2DPatch]);
 
