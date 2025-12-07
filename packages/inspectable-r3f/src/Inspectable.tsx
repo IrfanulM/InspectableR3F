@@ -7,6 +7,12 @@ import { createRoot } from 'react-dom/client';
 import type { Root } from 'react-dom/client';
 import originalHtml2canvas from 'html2canvas';
 
+declare var process: {
+    env: {
+        NODE_ENV: string;
+    };
+};
+
 interface CaptureInfo {
     element: HTMLElement;
     width: number;
@@ -49,6 +55,7 @@ function projectPoint(matrix: DOMMatrix, x: number, y: number) {
 function ensureGhost(canvas: HTMLCanvasElement): HTMLElement {
     if (!canvas.__inspectable_ghost) {
         const ghost = document.createElement('div');
+        ghost.style.all = 'initial';
         ghost.style.position = 'absolute';
         ghost.style.top = '0';
         ghost.style.left = '0';
@@ -57,7 +64,6 @@ function ensureGhost(canvas: HTMLCanvasElement): HTMLElement {
         ghost.style.pointerEvents = 'none';
         ghost.style.overflow = 'hidden';
         canvas.__inspectable_ghost = ghost;
-
         canvas.__inspectable_matrix = new DOMMatrix();
         canvas.__inspectable_stack = [];
     }
@@ -424,11 +430,6 @@ function applyCanvas2DPatches() {
     } as any;
 }
 
-// Apply patches on first module load if in browser
-if (typeof window !== 'undefined') {
-    applyCanvas2DPatches();
-}
-
 // Drop-in wrapper for html2canvas that automatically registers the result
 export async function html2canvas(
     element: HTMLElement,
@@ -632,6 +633,14 @@ function ModalContent({ state }: { state: ModalState }) {
     const { captureInfo } = state;
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
     const [snapshotError, setSnapshotError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const handleEscape = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') state.onClose();
+        };
+        window.addEventListener('keydown', handleEscape);
+        return () => window.removeEventListener('keydown', handleEscape);
+    }, [state]);
 
     const handleSnapshot = () => {
         const el = captureInfo.element;
@@ -879,6 +888,11 @@ interface InspectableProps {
  * Just add <Inspectable /> once inside your canvas.
  */
 export function Inspectable({ enableCanvas2DPatch = true }: InspectableProps = {}) {
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (isProduction) {
+        return null;
+    }
+
     const { gl, scene, camera } = useThree();
     const raycasterRef = useRef(new Raycaster());
     const pointerRef = useRef(new Vector2());
@@ -1015,17 +1029,13 @@ export function Inspectable({ enableCanvas2DPatch = true }: InspectableProps = {
 
         return () => {
             canvas.removeEventListener('contextmenu', handleContextMenu);
-            // Disable Canvas 2D patching when unmounted
-            window.__r3f_inspectable_active = false;
-
-            // Decrement ref count and restore prototypes if this was the last instance
             patchRefCount--;
             if (patchRefCount === 0) {
+                window.__r3f_inspectable_active = false;
                 restoreCanvas2DPatches();
             }
         };
     }, [gl, scene, camera, enableCanvas2DPatch]);
 
-    // Return null - R3F's reconciler expects 3D objects or null, not DOM elements
     return null;
 }
