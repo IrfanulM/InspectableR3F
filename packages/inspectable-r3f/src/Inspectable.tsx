@@ -434,16 +434,21 @@ export async function html2canvas(
     element: HTMLElement,
     options?: Parameters<typeof originalHtml2canvas>[1]
 ): Promise<HTMLCanvasElement> {
-    const canvas = await originalHtml2canvas(element, options);
+    try {
+        const canvas = await originalHtml2canvas(element, options);
 
-    containerRegistry.set(canvas, {
-        element,
-        width: options?.width || element.offsetWidth,
-        height: options?.height || element.offsetHeight,
-        scale: options?.scale || 1,
-    });
+        containerRegistry.set(canvas, {
+            element,
+            width: options?.width || element.offsetWidth,
+            height: options?.height || element.offsetHeight,
+            scale: options?.scale || 1,
+        });
 
-    return canvas;
+        return canvas;
+    } catch (error) {
+        console.warn('[inspectable-r3f] html2canvas capture failed:', error);
+        throw error;
+    }
 }
 
 // Heuristic to find which DOM element generated the texture on a clicked mesh
@@ -661,10 +666,12 @@ function ModalContent({ state }: { state: ModalState }) {
     const originalStyleRef = useRef<{ position: string; left: string } | null>(null);
     const { captureInfo } = state;
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+    const [snapshotError, setSnapshotError] = useState<string | null>(null);
 
     const handleSnapshot = () => {
         const el = captureInfo.element;
         let url = '';
+        setSnapshotError(null);
 
         try {
             if (el instanceof HTMLCanvasElement) {
@@ -692,9 +699,15 @@ function ModalContent({ state }: { state: ModalState }) {
                 link.download = `texture-snapshot-${Date.now()}.png`;
                 link.href = url;
                 link.click();
+            } else {
+                setSnapshotError('No image data available');
             }
         } catch (e) {
-            console.error('Snapshot failed:', e);
+            const errorMsg = e instanceof Error && e.name === 'SecurityError'
+                ? 'Canvas is tainted (cross-origin content)'
+                : 'Snapshot failed';
+            setSnapshotError(errorMsg);
+            console.warn('[inspectable-r3f] Snapshot failed:', e);
         }
     };
 
@@ -865,7 +878,11 @@ function ModalContent({ state }: { state: ModalState }) {
                         </p>
                     </div>
 
+
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        {snapshotError && (
+                            <span style={{ color: '#f87171', fontSize: '11px' }}>{snapshotError}</span>
+                        )}
                         <button
                             onClick={handleSnapshot}
                             style={{ background: '#333', border: 'none', color: '#ccc', fontSize: '11px', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}
