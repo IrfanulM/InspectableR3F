@@ -520,33 +520,6 @@ function associateMeshWithCanvas(mesh: Mesh, materialIndex?: number): CaptureInf
     return undefined;
 }
 
-// Singleton roots for UI portals to prevent re-creation overhead
-let modalRoot: Root | null = null;
-let modalContainer: HTMLDivElement | null = null;
-
-function ensureModalContainer() {
-    if (!modalContainer) {
-        modalContainer = document.createElement('div');
-        modalContainer.id = 'inspectable-r3f-modal';
-        document.body.appendChild(modalContainer);
-        modalRoot = createRoot(modalContainer);
-    }
-    return modalRoot!;
-}
-
-let contextMenuRoot: Root | null = null;
-let contextMenuContainer: HTMLDivElement | null = null;
-
-function ensureContextMenuContainer() {
-    if (!contextMenuContainer) {
-        contextMenuContainer = document.createElement('div');
-        contextMenuContainer.id = 'inspectable-r3f-context-menu';
-        document.body.appendChild(contextMenuContainer);
-        contextMenuRoot = createRoot(contextMenuContainer);
-    }
-    return contextMenuRoot!;
-}
-
 const overlayStyle: CSSProperties = {
     position: 'fixed',
     inset: 0,
@@ -651,14 +624,6 @@ function ContextMenuContent({ state }: { state: ContextMenuState }) {
             )}
         </div>
     );
-}
-
-function showContextMenu(state: ContextMenuState) {
-    ensureContextMenuContainer().render(<ContextMenuContent state={state} />);
-}
-
-function hideContextMenu() {
-    if (contextMenuRoot) contextMenuRoot.render(null);
 }
 
 function ModalContent({ state }: { state: ModalState }) {
@@ -899,14 +864,6 @@ function ModalContent({ state }: { state: ModalState }) {
     );
 }
 
-function showModal(state: ModalState) {
-    ensureModalContainer().render(<ModalContent state={state} />);
-}
-
-function hideModal() {
-    if (modalRoot) modalRoot.render(null);
-}
-
 interface InspectableProps {
     /**
      * Whether to enable Canvas 2D API patching for ghost DOM inspection.
@@ -923,8 +880,60 @@ interface InspectableProps {
  */
 export function Inspectable({ enableCanvas2DPatch = true }: InspectableProps = {}) {
     const { gl, scene, camera } = useThree();
-    const raycaster = new Raycaster();
-    const pointer = new Vector2();
+    const raycasterRef = useRef(new Raycaster());
+    const pointerRef = useRef(new Vector2());
+
+    // State for UI - triggers imperative rendering
+    const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+    const [modal, setModal] = useState<ModalState | null>(null);
+
+    // Refs for imperative React roots (needed because R3F's reconciler can't handle DOM portals)
+    const contextMenuRootRef = useRef<{ container: HTMLDivElement; root: Root } | null>(null);
+    const modalRootRef = useRef<{ container: HTMLDivElement; root: Root } | null>(null);
+
+    // Imperatively render context menu when state changes
+    useEffect(() => {
+        if (contextMenu) {
+            if (!contextMenuRootRef.current) {
+                const container = document.createElement('div');
+                container.id = 'inspectable-r3f-context-menu';
+                document.body.appendChild(container);
+                contextMenuRootRef.current = { container, root: createRoot(container) };
+            }
+            contextMenuRootRef.current.root.render(<ContextMenuContent state={contextMenu} />);
+        } else if (contextMenuRootRef.current) {
+            contextMenuRootRef.current.root.render(null);
+        }
+    }, [contextMenu]);
+
+    // Imperatively render modal when state changes
+    useEffect(() => {
+        if (modal) {
+            if (!modalRootRef.current) {
+                const container = document.createElement('div');
+                container.id = 'inspectable-r3f-modal';
+                document.body.appendChild(container);
+                modalRootRef.current = { container, root: createRoot(container) };
+            }
+            modalRootRef.current.root.render(<ModalContent state={modal} />);
+        } else if (modalRootRef.current) {
+            modalRootRef.current.root.render(null);
+        }
+    }, [modal]);
+
+    // Cleanup roots on unmount
+    useEffect(() => {
+        return () => {
+            if (contextMenuRootRef.current) {
+                contextMenuRootRef.current.root.unmount();
+                contextMenuRootRef.current.container.remove();
+            }
+            if (modalRootRef.current) {
+                modalRootRef.current.root.unmount();
+                modalRootRef.current.container.remove();
+            }
+        };
+    }, []);
 
     useEffect(() => {
         // Increment patch reference count and ensure patches are applied
@@ -937,9 +946,14 @@ export function Inspectable({ enableCanvas2DPatch = true }: InspectableProps = {
         window.__r3f_inspectable_active = enableCanvas2DPatch;
 
         const canvas = gl.domElement;
+        const raycaster = raycasterRef.current;
+        const pointer = pointerRef.current;
 
         const handleContextMenu = (event: MouseEvent) => {
             event.preventDefault();
+
+            // Close any existing context menu first
+            setContextMenu(null);
 
             // Convert mouse coordinates to normalized device coordinates
             const rect = canvas.getBoundingClientRect();
@@ -973,27 +987,27 @@ export function Inspectable({ enableCanvas2DPatch = true }: InspectableProps = {
 
             // Show context menu - disabled if no texture found
             if (!captureInfo) {
-                showContextMenu({
+                setContextMenu({
                     x: event.clientX,
                     y: event.clientY,
                     disabled: true,
-                    onClose: hideContextMenu,
+                    onClose: () => setContextMenu(null),
                 });
                 return;
             }
 
             captureInfo.mesh = mesh;
 
-            showContextMenu({
+            setContextMenu({
                 x: event.clientX,
                 y: event.clientY,
                 onInspect: () => {
-                    showModal({
+                    setModal({
                         captureInfo: captureInfo!,
-                        onClose: hideModal,
+                        onClose: () => setModal(null),
                     });
                 },
-                onClose: hideContextMenu,
+                onClose: () => setContextMenu(null),
             });
         };
 
@@ -1012,5 +1026,6 @@ export function Inspectable({ enableCanvas2DPatch = true }: InspectableProps = {
         };
     }, [gl, scene, camera, enableCanvas2DPatch]);
 
+    // Return null - R3F's reconciler expects 3D objects or null, not DOM elements
     return null;
 }
