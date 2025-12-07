@@ -192,14 +192,30 @@ const faceData = [
 
 function CubeFace({ face }: { face: typeof faceData[0] }) {
     const meshRef = useRef<THREE.Mesh>(null);
-    const texture = createCanvas2DTexture(face.label, face.color);
 
-    useCanvas2DWithHtml(face.label, face.color, 200, 200, meshRef);
+    const htmlContent = (
+        <div style={{
+            width: 200,
+            height: 200,
+            background: face.color,
+            color: 'white',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontFamily: 'Arial',
+            fontWeight: 'bold',
+            fontSize: 28,
+        }}>
+            {face.label}
+        </div>
+    );
+
+    useHtmlTexture(htmlContent, 200, 200, meshRef);
 
     return (
         <mesh ref={meshRef} position={face.pos} rotation={face.rot}>
             <planeGeometry args={[2, 2]} />
-            <meshBasicMaterial map={texture} side={THREE.DoubleSide} />
+            <meshBasicMaterial side={THREE.DoubleSide} />
         </mesh>
     );
 }

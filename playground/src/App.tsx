@@ -9,20 +9,16 @@ function App() {
         <Canvas camera={{ position: [0, 2, 10], fov: 50 }} style={{ width: '100%', height: '100vh' }}>
             <ambientLight intensity={1} />
 
+            <Inspectable />
+
             {/* CASE 1: html2canvas-based texture */}
-            <Inspectable>
-                <Html2CanvasPlane />
-            </Inspectable>
+            <Html2CanvasPlane />
 
             {/* CASE 2: Canvas 2D texture */}
-            <Inspectable>
-                <Canvas2DBox />
-            </Inspectable>
+            <Canvas2DBox />
 
             {/* CASE 3: Multi-face cube */}
-            <Inspectable>
-                <MultiTextureCube />
-            </Inspectable>
+            <MultiTextureCube />
 
             <OrbitControls enablePan={true} mouseButtons={{ LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN }} />
             <gridHelper args={[20, 20, '#555', '#333']} position={[0, -2, 0]} />

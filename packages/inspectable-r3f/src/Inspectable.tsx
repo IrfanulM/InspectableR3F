@@ -1,7 +1,7 @@
-import { useRef, useCallback, useEffect, useState } from 'react';
-import type { ReactNode, CSSProperties } from 'react';
-import type { ThreeEvent } from '@react-three/fiber';
-import { Group, Mesh, MeshStandardMaterial, Texture } from 'three';
+import { useRef, useEffect, useState } from 'react';
+import type { CSSProperties } from 'react';
+import { useThree } from '@react-three/fiber';
+import { Mesh, MeshStandardMaterial, Texture, Raycaster, Vector2 } from 'three';
 import * as THREE from 'three';
 import { createRoot } from 'react-dom/client';
 import type { Root } from 'react-dom/client';
@@ -369,18 +369,15 @@ export async function html2canvas(
 }
 
 // Heuristic to find which DOM element generated the texture on a clicked mesh
-function associateMeshWithCanvas(mesh: Mesh, event?: ThreeEvent<MouseEvent>): CaptureInfo | undefined {
-    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+function associateMeshWithCanvas(mesh: Mesh, materialIndex?: number): CaptureInfo | undefined {
+    const allMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
 
-    let searchMaterials = materials;
-
-    // Filter to the specific material index clicked if available
-    if (event?.face?.materialIndex !== undefined && materials[event.face.materialIndex]) {
-        searchMaterials = [materials[event.face.materialIndex]];
-    }
+    const materials = (typeof materialIndex === 'number' && allMaterials[materialIndex])
+        ? [allMaterials[materialIndex]]
+        : allMaterials;
 
     // Pass 1: Check for explicit overrides or tracked registry items
-    for (const mat of searchMaterials) {
+    for (const mat of materials) {
         const material = mat as MeshStandardMaterial;
 
         // Priority: Manual override via userData (for complex/composite materials)
@@ -419,7 +416,7 @@ function associateMeshWithCanvas(mesh: Mesh, event?: ThreeEvent<MouseEvent>): Ca
     }
 
     // Pass 2: Fallback for generic textures not in registry
-    for (const mat of searchMaterials) {
+    for (const mat of materials) {
         const material = mat as MeshStandardMaterial;
         if (!material?.map?.source?.data) continue;
         const canvas = material.map.source.data;
@@ -802,62 +799,74 @@ function hideModal() {
     if (modalRoot) modalRoot.render(null);
 }
 
-export interface InspectableProps {
-    children: ReactNode;
-}
-
 /**
- * Wraps R3F meshes to enable "Inspect Element" functionality on textures
- * generated from HTML via the exported html2canvas wrapper.
+ * Enables "Inspect Element" functionality globally across all meshes in the scene.
+ * Just add <Inspectable /> once inside your canvas.
  */
-export function Inspectable({ children }: InspectableProps) {
-    const groupRef = useRef<Group>(null);
+export function Inspectable() {
+    const { gl, scene, camera } = useThree();
+    const raycaster = new Raycaster();
+    const pointer = new Vector2();
 
-    const handleContextMenu = useCallback((event: ThreeEvent<MouseEvent>) => {
-        // Prevent R3F event propagation and the browser's native context menu
-        event.stopPropagation();
-        event.nativeEvent.preventDefault();
+    useEffect(() => {
+        const canvas = gl.domElement;
 
-        const mesh = event.object as Mesh;
-        if (!mesh) return;
+        const handleContextMenu = (event: MouseEvent) => {
+            event.preventDefault();
 
-        let captureInfo: CaptureInfo | undefined;
+            // Convert mouse coordinates to normalized device coordinates
+            const rect = canvas.getBoundingClientRect();
+            pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-        // Attempt to find tracking info via the texture registry or fallback logic
-        captureInfo = associateMeshWithCanvas(mesh, event);
+            // Raycast to find intersected objects
+            raycaster.setFromCamera(pointer, camera);
+            const intersects = raycaster.intersectObjects(scene.children, true);
 
-        // Fallback for manual associations (userData)
-        if (!captureInfo && mesh.userData?.inspectableContainer) {
-            captureInfo = {
-                element: mesh.userData.inspectableContainer,
-                width: mesh.userData.inspectableContainer.offsetWidth || 200,
-                height: mesh.userData.inspectableContainer.offsetHeight || 200,
-                scale: 2,
-                mesh,
-            };
-        }
+            // Find the first mesh with a material
+            const hit = intersects.find(i => i.object instanceof Mesh);
+            if (!hit) return;
 
-        if (!captureInfo) return;
+            const mesh = hit.object as Mesh;
+            let captureInfo: CaptureInfo | undefined;
 
-        captureInfo.mesh = mesh;
+            // Attempt to find tracking info via the texture registry or fallback logic
+            captureInfo = associateMeshWithCanvas(mesh, hit.face?.materialIndex);
 
-        const nativeEvent = event.nativeEvent;
-        showContextMenu({
-            x: nativeEvent.clientX,
-            y: nativeEvent.clientY,
-            onInspect: () => {
-                showModal({
-                    captureInfo: captureInfo!,
-                    onClose: hideModal,
-                });
-            },
-            onClose: hideContextMenu,
-        });
-    }, []);
+            // Fallback for manual associations (userData)
+            if (!captureInfo && mesh.userData?.inspectableContainer) {
+                captureInfo = {
+                    element: mesh.userData.inspectableContainer,
+                    width: mesh.userData.inspectableContainer.offsetWidth || 200,
+                    height: mesh.userData.inspectableContainer.offsetHeight || 200,
+                    scale: 2,
+                    mesh,
+                };
+            }
 
-    return (
-        <group ref={groupRef} onContextMenu={handleContextMenu}>
-            {children}
-        </group>
-    );
+            if (!captureInfo) return;
+
+            captureInfo.mesh = mesh;
+
+            showContextMenu({
+                x: event.clientX,
+                y: event.clientY,
+                onInspect: () => {
+                    showModal({
+                        captureInfo: captureInfo!,
+                        onClose: hideModal,
+                    });
+                },
+                onClose: hideContextMenu,
+            });
+        };
+
+        canvas.addEventListener('contextmenu', handleContextMenu);
+
+        return () => {
+            canvas.removeEventListener('contextmenu', handleContextMenu);
+        };
+    }, [gl, scene, camera]);
+
+    return null;
 }
