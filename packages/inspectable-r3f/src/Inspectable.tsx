@@ -36,6 +36,7 @@ declare global {
     }
     interface Window {
         __r3f_inspectable_patched?: boolean;
+        __r3f_inspectable_active?: boolean;
     }
 }
 
@@ -72,6 +73,7 @@ if (typeof window !== 'undefined' && !window.__r3f_inspectable_patched) {
     // Track transform state to position ghost elements correctly
     const originalSave = ctxProto.save;
     ctxProto.save = function () {
+        if (!window.__r3f_inspectable_active) return originalSave.apply(this, arguments as any);
         const canvas = this.canvas;
         if (canvas.__inspectable_matrix && canvas.__inspectable_stack) {
             canvas.__inspectable_stack.push({
@@ -86,6 +88,7 @@ if (typeof window !== 'undefined' && !window.__r3f_inspectable_patched) {
 
     const originalRestore = ctxProto.restore;
     ctxProto.restore = function () {
+        if (!window.__r3f_inspectable_active) return originalRestore.apply(this, arguments as any);
         const canvas = this.canvas;
         if (canvas.__inspectable_stack && canvas.__inspectable_stack.length > 0) {
             const state = canvas.__inspectable_stack.pop()!;
@@ -97,6 +100,7 @@ if (typeof window !== 'undefined' && !window.__r3f_inspectable_patched) {
     // Mirror transform methods to keep ghost positioning in sync
     const originalTranslate = ctxProto.translate;
     ctxProto.translate = function (x, y) {
+        if (!window.__r3f_inspectable_active) return originalTranslate.apply(this, arguments as any);
         ensureGhost(this.canvas);
         this.canvas.__inspectable_matrix!.translateSelf(x, y);
         return originalTranslate.apply(this, arguments as any);
@@ -104,6 +108,7 @@ if (typeof window !== 'undefined' && !window.__r3f_inspectable_patched) {
 
     const originalRotate = ctxProto.rotate;
     ctxProto.rotate = function (angle) {
+        if (!window.__r3f_inspectable_active) return originalRotate.apply(this, arguments as any);
         ensureGhost(this.canvas);
         this.canvas.__inspectable_matrix!.rotateSelf(angle * (180 / Math.PI));
         return originalRotate.apply(this, arguments as any);
@@ -111,6 +116,7 @@ if (typeof window !== 'undefined' && !window.__r3f_inspectable_patched) {
 
     const originalScale = ctxProto.scale;
     ctxProto.scale = function (x, y) {
+        if (!window.__r3f_inspectable_active) return originalScale.apply(this, arguments as any);
         ensureGhost(this.canvas);
         this.canvas.__inspectable_matrix!.scaleSelf(x, y);
         return originalScale.apply(this, arguments as any);
@@ -118,6 +124,7 @@ if (typeof window !== 'undefined' && !window.__r3f_inspectable_patched) {
 
     const originalTransform = ctxProto.transform;
     ctxProto.transform = function (a, b, c, d, e, f) {
+        if (!window.__r3f_inspectable_active) return originalTransform.apply(this, arguments as any);
         ensureGhost(this.canvas);
         const m = new DOMMatrix();
         m.a = a; m.b = b; m.c = c; m.d = d; m.e = e; m.f = f;
@@ -127,6 +134,7 @@ if (typeof window !== 'undefined' && !window.__r3f_inspectable_patched) {
 
     const originalSetTransform = ctxProto.setTransform;
     ctxProto.setTransform = function (a?: any, b?: any, c?: any, d?: any, e?: any, f?: any) {
+        if (!window.__r3f_inspectable_active) return originalSetTransform.apply(this, arguments as any);
         ensureGhost(this.canvas);
         if (arguments.length === 0) {
             this.canvas.__inspectable_matrix = new DOMMatrix();
@@ -148,6 +156,7 @@ if (typeof window !== 'undefined' && !window.__r3f_inspectable_patched) {
     // Reset ghost DOM when canvas is cleared
     const originalClearRect = ctxProto.clearRect;
     ctxProto.clearRect = function (x, y, w, h) {
+        if (!window.__r3f_inspectable_active) return originalClearRect.apply(this, arguments as any);
         const ghost = ensureGhost(this.canvas);
         if (x === 0 && y === 0 && w >= this.canvas.width && h >= this.canvas.height) {
             ghost.innerHTML = '';
@@ -191,6 +200,7 @@ if (typeof window !== 'undefined' && !window.__r3f_inspectable_patched) {
     // Create selectable text overlays
     const originalFillText = ctxProto.fillText;
     ctxProto.fillText = function (text, x, y, _maxWidth) {
+        if (!window.__r3f_inspectable_active) return originalFillText.apply(this, arguments as any);
         const metrics = this.measureText(text);
 
         const width = metrics.width;
@@ -229,6 +239,7 @@ if (typeof window !== 'undefined' && !window.__r3f_inspectable_patched) {
 
     const originalStrokeText = ctxProto.strokeText;
     ctxProto.strokeText = function (text, x, y, _maxWidth) {
+        if (!window.__r3f_inspectable_active) return originalStrokeText.apply(this, arguments as any);
         const metrics = this.measureText(text);
         const width = metrics.width;
         const ascent = metrics.fontBoundingBoxAscent || metrics.actualBoundingBoxAscent;
@@ -264,6 +275,7 @@ if (typeof window !== 'undefined' && !window.__r3f_inspectable_patched) {
 
     const originalFillRect = ctxProto.fillRect;
     ctxProto.fillRect = function (x, y, w, h) {
+        if (!window.__r3f_inspectable_active) return originalFillRect.apply(this, arguments as any);
         // Detect full canvas clear via fillRect and reset ghost DOM
         if (x === 0 && y === 0 && w >= this.canvas.width && h >= this.canvas.height) {
             const ghost = ensureGhost(this.canvas);
@@ -280,6 +292,7 @@ if (typeof window !== 'undefined' && !window.__r3f_inspectable_patched) {
 
     const originalStrokeRect = ctxProto.strokeRect;
     ctxProto.strokeRect = function (x, y, w, h) {
+        if (!window.__r3f_inspectable_active) return originalStrokeRect.apply(this, arguments as any);
         const el = document.createElement('div');
         el.style.width = `${w}px`;
         el.style.height = `${h}px`;
@@ -292,6 +305,7 @@ if (typeof window !== 'undefined' && !window.__r3f_inspectable_patched) {
 
     // Patch drawImage to propagate tracking info when a tracked canvas is drawn onto another (composition)
     CanvasRenderingContext2D.prototype.drawImage = function (this: CanvasRenderingContext2D, ...args: any[]) {
+        if (!window.__r3f_inspectable_active) return originalDrawImage.apply(this, args as any);
         try {
             const image = args[0];
             const el = document.createElement('div');
@@ -523,8 +537,9 @@ interface ModalState {
 interface ContextMenuState {
     x: number;
     y: number;
-    onInspect: () => void;
+    onInspect?: () => void;
     onClose: () => void;
+    disabled?: boolean;
 }
 
 function ContextMenuContent({ state }: { state: ContextMenuState }) {
@@ -545,14 +560,26 @@ function ContextMenuContent({ state }: { state: ContextMenuState }) {
             style={{ ...contextMenuStyle, left: state.x, top: state.y }}
             onClick={(e) => e.stopPropagation()}
         >
-            <div
-                style={contextMenuItemStyle}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#2a2a2a')}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                onClick={() => { state.onInspect(); state.onClose(); }}
-            >
-                Inspect Texture
-            </div>
+            {state.disabled ? (
+                <div
+                    style={{
+                        ...contextMenuItemStyle,
+                        color: '#666',
+                        cursor: 'default',
+                    }}
+                >
+                    No texture source found
+                </div>
+            ) : (
+                <div
+                    style={contextMenuItemStyle}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#2a2a2a')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    onClick={() => { state.onInspect?.(); state.onClose(); }}
+                >
+                    Inspect Texture
+                </div>
+            )}
         </div>
     );
 }
@@ -809,6 +836,9 @@ export function Inspectable() {
     const pointer = new Vector2();
 
     useEffect(() => {
+        // Enable Canvas 2D patching
+        window.__r3f_inspectable_active = true;
+
         const canvas = gl.domElement;
 
         const handleContextMenu = (event: MouseEvent) => {
@@ -844,7 +874,16 @@ export function Inspectable() {
                 };
             }
 
-            if (!captureInfo) return;
+            // Show context menu - disabled if no texture found
+            if (!captureInfo) {
+                showContextMenu({
+                    x: event.clientX,
+                    y: event.clientY,
+                    disabled: true,
+                    onClose: hideContextMenu,
+                });
+                return;
+            }
 
             captureInfo.mesh = mesh;
 
@@ -865,6 +904,8 @@ export function Inspectable() {
 
         return () => {
             canvas.removeEventListener('contextmenu', handleContextMenu);
+            // Disable Canvas 2D patching when unmounted
+            window.__r3f_inspectable_active = false;
         };
     }, [gl, scene, camera]);
 
