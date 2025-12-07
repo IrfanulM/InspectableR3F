@@ -826,18 +826,28 @@ function hideModal() {
     if (modalRoot) modalRoot.render(null);
 }
 
+interface InspectableProps {
+    /**
+     * Whether to enable Canvas 2D API patching for ghost DOM inspection.
+     * When enabled (default), text drawn via fillText/strokeText becomes selectable.
+     * Disable if it conflicts with third-party canvas libraries.
+     * @default true
+     */
+    enableCanvas2DPatch?: boolean;
+}
+
 /**
  * Enables "Inspect Element" functionality globally across all meshes in the scene.
  * Just add <Inspectable /> once inside your canvas.
  */
-export function Inspectable() {
+export function Inspectable({ enableCanvas2DPatch = true }: InspectableProps = {}) {
     const { gl, scene, camera } = useThree();
     const raycaster = new Raycaster();
     const pointer = new Vector2();
 
     useEffect(() => {
-        // Enable Canvas 2D patching
-        window.__r3f_inspectable_active = true;
+        // Enable Canvas 2D patching only if prop allows
+        window.__r3f_inspectable_active = enableCanvas2DPatch;
 
         const canvas = gl.domElement;
 
@@ -907,7 +917,7 @@ export function Inspectable() {
             // Disable Canvas 2D patching when unmounted
             window.__r3f_inspectable_active = false;
         };
-    }, [gl, scene, camera]);
+    }, [gl, scene, camera, enableCanvas2DPatch]);
 
     return null;
 }
