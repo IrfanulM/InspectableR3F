@@ -1,11 +1,13 @@
 {
     "name": "inspectable-r3f",
-    "version": "0.0.1",
+    "version": "1.0.0",
     "description": "Inspect HTML textures on React Three Fiber meshes",
+    "author": "Irfanul Majumder",
     "type": "module",
     "main": "./dist/inspectable-r3f.umd.cjs",
     "module": "./dist/inspectable-r3f.js",
     "types": "./dist/index.d.ts",
+    "sideEffects": false,
     "exports": {
         ".": {
             "import": "./dist/inspectable-r3f.js",
@@ -49,8 +51,12 @@
         "texture"
     ],
     "license": "MIT",
+    "homepage": "https://github.com/IrfanulM/InspectableR3F#readme",
+    "bugs": {
+        "url": "https://github.com/IrfanulM/InspectableR3F/issues"
+    },
     "repository": {
         "type": "git",
-        "url": "https://github.com/user/inspectable-r3f"
+        "url": "https://github.com/IrfanulM/InspectableR3F"
     }
 }
