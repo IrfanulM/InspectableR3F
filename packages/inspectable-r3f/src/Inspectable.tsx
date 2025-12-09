@@ -281,6 +281,7 @@ function applyCanvas2DPatches() {
         el.style.width = `${width}px`;
         el.style.height = `${height}px`;
         el.style.lineHeight = 'normal';
+        el.style.textAlign = this.textAlign;
 
         el.setAttribute('data-inspectable-type', 'text');
         el.style.color = 'transparent';
@@ -318,6 +319,7 @@ function applyCanvas2DPatches() {
         el.style.width = `${width}px`;
         el.style.height = `${height}px`;
         el.style.lineHeight = 'normal';
+        el.style.textAlign = this.textAlign;
 
         el.setAttribute('data-inspectable-type', 'text-stroke');
         el.style.color = 'transparent';
@@ -731,16 +733,6 @@ function ModalContent({ state }: { state: ModalState }) {
         container.style.pointerEvents = 'auto';
         container.style.userSelect = 'auto';
 
-        // Make text elements visible in the modal (they're normally transparent overlays)
-        if (captureInfo.ghostContainer) {
-            const textElements = container.querySelectorAll('[data-inspectable-type*="text"]');
-            textElements.forEach((el) => {
-                const htmlEl = el as HTMLElement;
-                htmlEl.setAttribute('data-original-color', htmlEl.style.color);
-                htmlEl.style.color = 'white';
-            });
-        }
-
         contentRef.current.appendChild(container);
 
         // Update dimensions state
@@ -834,19 +826,6 @@ function ModalContent({ state }: { state: ModalState }) {
         function restoreElement() {
             if (container instanceof HTMLVideoElement) {
                 container.controls = false;
-            }
-
-            // Restore text element colors if they were modified
-            if (captureInfo.ghostContainer) {
-                const textElements = container.querySelectorAll('[data-inspectable-type*="text"]');
-                textElements.forEach((el) => {
-                    const htmlEl = el as HTMLElement;
-                    const originalColor = htmlEl.getAttribute('data-original-color');
-                    if (originalColor !== null) {
-                        htmlEl.style.color = originalColor;
-                        htmlEl.removeAttribute('data-original-color');
-                    }
-                });
             }
 
             if (captureInfo.wasConnected) {
