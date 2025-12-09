@@ -13,7 +13,7 @@ InspectableR3F brings browser DevTools-like inspection to React Three Fiber mesh
 
 ## Video Demo
 
-**Demo coming soon!**
+![Demo](demo.gif)
 
 ---
 
