@@ -629,7 +629,7 @@ function ContextMenuContent({ state }: { state: ContextMenuState }) {
 
 function ModalContent({ state }: { state: ModalState }) {
     const contentRef = useRef<HTMLDivElement>(null);
-    const originalStyleRef = useRef<{ position: string; left: string } | null>(null);
+    const originalStyleRef = useRef<{ position: string; left: string; pointerEvents: string } | null>(null);
     const { captureInfo } = state;
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
     const [snapshotError, setSnapshotError] = useState<string | null>(null);
@@ -700,6 +700,7 @@ function ModalContent({ state }: { state: ModalState }) {
         originalStyleRef.current = {
             position: container.style.position,
             left: container.style.left,
+            pointerEvents: container.style.pointerEvents,
         };
 
         if (captureInfo.textureSourceCanvas) {
@@ -727,6 +728,19 @@ function ModalContent({ state }: { state: ModalState }) {
         container.style.position = 'relative';
         container.style.left = '0';
         container.style.transform = 'none';
+        container.style.pointerEvents = 'auto';
+        container.style.userSelect = 'auto';
+
+        // Make text elements visible in the modal (they're normally transparent overlays)
+        if (captureInfo.ghostContainer) {
+            const textElements = container.querySelectorAll('[data-inspectable-type*="text"]');
+            textElements.forEach((el) => {
+                const htmlEl = el as HTMLElement;
+                htmlEl.setAttribute('data-original-color', htmlEl.style.color);
+                htmlEl.style.color = 'white';
+            });
+        }
+
         contentRef.current.appendChild(container);
 
         // Update dimensions state
@@ -822,9 +836,23 @@ function ModalContent({ state }: { state: ModalState }) {
                 container.controls = false;
             }
 
+            // Restore text element colors if they were modified
+            if (captureInfo.ghostContainer) {
+                const textElements = container.querySelectorAll('[data-inspectable-type*="text"]');
+                textElements.forEach((el) => {
+                    const htmlEl = el as HTMLElement;
+                    const originalColor = htmlEl.getAttribute('data-original-color');
+                    if (originalColor !== null) {
+                        htmlEl.style.color = originalColor;
+                        htmlEl.removeAttribute('data-original-color');
+                    }
+                });
+            }
+
             if (captureInfo.wasConnected) {
                 container.style.position = originalStyleRef.current?.position || 'absolute';
                 container.style.left = originalStyleRef.current?.left || '-9999px';
+                container.style.pointerEvents = originalStyleRef.current?.pointerEvents || 'none';
                 document.body.appendChild(container);
             } else if (container.parentNode === contentRef.current) {
                 container.remove();
@@ -949,16 +977,20 @@ export function Inspectable({ enableCanvas2DPatch = true }: InspectableProps = {
         };
     }, []);
 
-    useEffect(() => {
-        // Increment patch reference count and ensure patches are applied
+    // Apply patches eagerly (during render, not in useEffect) to avoid race conditions
+    if (!window.__r3f_inspectable_patched) {
+        applyCanvas2DPatches();
+    }
+
+    // Increment ref count eagerly
+    const isFirstMount = useRef(true);
+    if (isFirstMount.current) {
         patchRefCount++;
-        if (patchRefCount === 1) {
-            applyCanvas2DPatches();
-        }
-
-        // Enable Canvas 2D patching only if prop allows
         window.__r3f_inspectable_active = enableCanvas2DPatch;
+        isFirstMount.current = false;
+    }
 
+    useEffect(() => {
         const canvas = gl.domElement;
         const raycaster = raycasterRef.current;
         const pointer = pointerRef.current;
