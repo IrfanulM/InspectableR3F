@@ -15,11 +15,12 @@ export default defineConfig({
             fileName: 'inspectable-r3f',
         },
         rollupOptions: {
-            external: ['react', 'react-dom', 'react/jsx-runtime', 'three', '@react-three/fiber'],
+            external: ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime', 'three', '@react-three/fiber'],
             output: {
                 globals: {
                     react: 'React',
                     'react-dom': 'ReactDOM',
+                    'react-dom/client': 'ReactDOM',
                     'react/jsx-runtime': 'jsxRuntime',
                     three: 'THREE',
                     '@react-three/fiber': 'ReactThreeFiber',
