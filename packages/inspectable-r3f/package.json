@@ -1,6 +1,6 @@
 {
     "name": "inspectable-r3f",
-    "version": "1.0.0",
+    "version": "0.1.0",
     "description": "Inspect HTML textures on React Three Fiber meshes",
     "author": "Irfanul Majumder",
     "type": "module",
