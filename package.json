@@ -10,5 +10,8 @@
   "scripts": {
     "dev": "npm run dev --workspace=playground",
     "build": "npm run build --workspace=inspectable-r3f"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
